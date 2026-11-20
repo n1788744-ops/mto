@@ -1,0 +1,148 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Registered customer profile storing phone number, name, and preferred search region.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID."
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Customer display name."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Customer phone number entered during registration."
+        },
+        "preferredRegion": {
+          "type": "string",
+          "enum": ["all", "melitopol", "kherson", "zaporizhzhia"],
+          "description": "Default selected region filter."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "fullName", "phoneNumber", "preferredRegion", "createdAt", "updatedAt"]
+    },
+    "FavoriteApartment": {
+      "title": "FavoriteApartment",
+      "description": "Saved apartment bookmark owned by a user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "apartmentId": {
+          "type": "string",
+          "description": "Identifier of the catalog apartment."
+        },
+        "apartmentTitle": {
+          "type": "string",
+          "description": "Title of the saved apartment."
+        },
+        "region": {
+          "type": "string",
+          "description": "Location region identifier."
+        },
+        "dealType": {
+          "type": "string",
+          "enum": ["rent", "sale"],
+          "description": "Whether the listing is for rent or sale."
+        },
+        "priceRub": {
+          "type": "integer",
+          "description": "Price in RUB."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when saved (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "apartmentId", "apartmentTitle", "region", "dealType", "priceRub", "createdAt", "updatedAt"]
+    },
+    "PaymentBooking": {
+      "title": "PaymentBooking",
+      "description": "Apartment booking or YooMoney payment record owned by a user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID."
+        },
+        "apartmentId": {
+          "type": "string",
+          "description": "Identifier of the booked apartment."
+        },
+        "apartmentTitle": {
+          "type": "string",
+          "description": "Title of the booked apartment."
+        },
+        "dealType": {
+          "type": "string",
+          "enum": ["rent", "sale"],
+          "description": "Rental or purchase deal type."
+        },
+        "amountRub": {
+          "type": "integer",
+          "description": "Payment or deposit amount in RUB."
+        },
+        "yoomoneyWallet": {
+          "type": "string",
+          "description": "Recipient YooMoney wallet 4100119599343199."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_payment", "confirmed", "cancelled"],
+          "description": "Booking payment status."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Optional customer note."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["userId", "apartmentId", "apartmentTitle", "dealType", "amountRub", "yoomoneyWallet", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private customer registration profile isolated by userId."
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": { "$ref": "#/entities/FavoriteApartment" },
+      "description": "Customer's saved favorite apartments."
+    },
+    "/users/{userId}/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/PaymentBooking" },
+      "description": "Customer's apartment bookings and YooMoney payment records."
+    }
+  }
+}

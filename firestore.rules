@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 80 &&
+             data.phoneNumber is string && data.phoneNumber.size() >= 5 && data.phoneNumber.size() <= 25 &&
+             data.preferredRegion in ['all', 'melitopol', 'kherson', 'zaporizhzhia'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidFavorite(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.apartmentId is string && data.apartmentId.size() >= 1 && data.apartmentId.size() <= 64 &&
+             data.apartmentTitle is string && data.apartmentTitle.size() >= 1 && data.apartmentTitle.size() <= 120 &&
+             data.region is string && data.region.size() >= 1 && data.region.size() <= 60 &&
+             data.dealType in ['rent', 'sale'] &&
+             data.priceRub is int && data.priceRub >= 0 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidBooking(data, userId) {
+      return data.userId is string && data.userId == userId &&
+             data.apartmentId is string && data.apartmentId.size() >= 1 && data.apartmentId.size() <= 64 &&
+             data.apartmentTitle is string && data.apartmentTitle.size() >= 1 && data.apartmentTitle.size() <= 120 &&
+             data.dealType in ['rent', 'sale'] &&
+             data.amountRub is int && data.amountRub > 0 &&
+             data.yoomoneyWallet is string && data.yoomoneyWallet == '4100119599343199' &&
+             data.status in ['pending_payment', 'confirmed', 'cancelled'] &&
+             (!('comment' in data) || (data.comment is string && data.comment.size() <= 300)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll(['userId', 'fullName', 'phoneNumber', 'preferredRegion', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'fullName', 'phoneNumber', 'preferredRegion', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(incoming(), userId);
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phoneNumber', 'preferredRegion', 'updatedAt']);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /favorites/{favoriteId} {
+        allow get: if isOwner(userId) && isValidId(favoriteId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(favoriteId) &&
+                         incoming().keys().hasAll(['userId', 'apartmentId', 'apartmentTitle', 'region', 'dealType', 'priceRub', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'apartmentId', 'apartmentTitle', 'region', 'dealType', 'priceRub', 'createdAt', 'updatedAt']) &&
+                         isValidFavorite(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(favoriteId) &&
+                         isValidFavorite(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().apartmentId == existing().apartmentId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['apartmentTitle', 'region', 'dealType', 'priceRub', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(favoriteId);
+      }
+
+      match /bookings/{bookingId} {
+        allow get: if isOwner(userId) && isValidId(bookingId);
+        allow list: if isOwner(userId);
+
+        allow create: if isOwner(userId) &&
+                         isValidId(bookingId) &&
+                         incoming().keys().hasAll(['userId', 'apartmentId', 'apartmentTitle', 'dealType', 'amountRub', 'yoomoneyWallet', 'status', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'apartmentId', 'apartmentTitle', 'dealType', 'amountRub', 'yoomoneyWallet', 'status', 'comment', 'createdAt', 'updatedAt']) &&
+                         incoming().status == 'pending_payment' &&
+                         isValidBooking(incoming(), userId);
+
+        allow update: if isOwner(userId) &&
+                         isValidId(bookingId) &&
+                         existing().status == 'pending_payment' &&
+                         isValidBooking(incoming(), userId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().apartmentId == existing().apartmentId &&
+                         incoming().yoomoneyWallet == existing().yoomoneyWallet &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'comment', 'updatedAt']);
+
+        allow delete: if isOwner(userId) && isValidId(bookingId);
+      }
+    }
+  }
+}

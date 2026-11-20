@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">ЮгДом</string>
+    <string name="welcome_title">Добро пожаловать!</string>
+    <string name="welcome_subtitle">Для продолжения введите номер телефона</string>
+    <string name="phone_label">Номер телефона</string>
+    <string name="name_label">Ваше имя</string>
+    <string name="continue_with_google">Продолжить с Google</string>
+    <string name="save_registration">Завершить регистрацию</string>
+    <string name="nav_catalog">Квартиры</string>
+    <string name="nav_map">Карта</string>
+    <string name="nav_ai">ИИ-Условия</string>
+    <string name="nav_profile">Кабинет</string>
+    <string name="pay_yoomoney">Оплатить через ЮMoney</string>
+    <string name="yoomoney_wallet">4100119599343199</string>
+    <string name="yoomoney_url">https://yoomoney.ru/to/4100119599343199</string>
+</resources>

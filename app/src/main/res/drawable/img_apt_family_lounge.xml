@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="400dp"
+    android:height="300dp"
+    android:viewportWidth="400"
+    android:viewportHeight="300">
+    <!-- Spacious 3-room family lounge -->
+    <path android:pathData="M0,0h400v220h-400z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:endX="400"
+                android:endY="220"
+                android:startX="0"
+                android:startY="0"
+                android:type="linear">
+                <item android:color="#EEF3F0" android:offset="0.0" />
+                <item android:color="#DDE5DF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#C6A786" android:pathData="M0,220h400v80h-400z" />
+    <!-- Wide garden window -->
+    <path android:fillColor="#A9D6EC" android:pathData="M42,30h168v132h-168z" />
+    <path android:fillColor="#7BB37A" android:pathData="M42,124 Q90,104 140,126 Q180,108 210,128 L210,162 L42,162 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M38,26h176v140h-176z M44,32v128h80v-128z M130,32v128h78v-128z" />
+    <!-- Bookshelf & TV console -->
+    <path android:fillColor="#4E3B2E" android:pathData="M242,40h124v180h-124z" />
+    <path android:fillColor="#1F2426" android:pathData="M258,76h92v56h-92z" />
+    <path android:fillColor="#E86A17" android:pathData="M270,92h68v8h-68z" />
+    <!-- Corner sage green family sofa -->
+    <path android:fillColor="#4E7361" android:pathData="M34,174h196v54h-196z" />
+    <path android:fillColor="#628C77" android:pathData="M42,196h180v28h-180z" />
+    <path android:fillColor="#E86A17" android:pathData="M52,180h24v20h-24z M184,180h24v20h-24z" />
+    <!-- Round dining table in foreground -->
+    <path android:fillColor="#7D5A40" android:pathData="M110,248h120v10h-120z M166,258h8v32h-8z" />
+</vector>
