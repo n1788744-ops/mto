@@ -145,9 +145,9 @@ object ApartmentCatalog {
         longitude = 35.3653,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Светлая гостиная с панорамным окном"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Кухня со встроенной техникой"),
-            ApartmentPhoto(R.drawable.img_apt_facade_south, "Благоустроенный двор и фасад"),
+            ApartmentPhoto(R.drawable.photo_apt_living_1, "Уютная гостиная с выходом на балкон"),
+            ApartmentPhoto(R.drawable.photo_apt_kitchen, "Просторная кухня-столовая"),
+            ApartmentPhoto(R.drawable.photo_apt_bedroom, "Спальня и зона отдыха"),
           ),
       ),
       Apartment(
@@ -175,9 +175,9 @@ object ApartmentCatalog {
         longitude = 35.3820,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_family_lounge, "Семейная гостиная 24 м²"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Просторная обеденная зона"),
-            ApartmentPhoto(R.drawable.img_apt_facade_south, "Кирпичный дом с парковкой"),
+            ApartmentPhoto(R.drawable.photo_apt_living_2, "Светлая семейная гостиная 24 м²"),
+            ApartmentPhoto(R.drawable.photo_apt_kitchen, "Большая кухня со встроенной техникой"),
+            ApartmentPhoto(R.drawable.photo_apt_facade_2, "Современный жилой дом"),
           ),
       ),
       Apartment(
@@ -205,9 +205,9 @@ object ApartmentCatalog {
         longitude = 35.3510,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_studio_warm, "Зона отдыха с арочным окном"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Компактная кухня"),
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Дневное освещение"),
+            ApartmentPhoto(R.drawable.photo_apt_bedroom, "Уютная зона отдыха в студии"),
+            ApartmentPhoto(R.drawable.photo_apt_living_1, "Гостиная с диваном и ТВ"),
+            ApartmentPhoto(R.drawable.photo_apt_kitchen, "Оборудованная кухонная зона"),
           ),
       ),
       Apartment(
@@ -235,9 +235,9 @@ object ApartmentCatalog {
         longitude = 35.3310,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_facade_south, "Фасад ЖК «Южный Квартал»"),
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Светлая жилая комната"),
-            ApartmentPhoto(R.drawable.img_apt_studio_warm, "Спальная зона"),
+            ApartmentPhoto(R.drawable.photo_apt_facade_2, "Фасад ЖК «Южный Квартал»"),
+            ApartmentPhoto(R.drawable.photo_apt_living_2, "Светлая жилая комната"),
+            ApartmentPhoto(R.drawable.photo_apt_bedroom, "Спальная зона"),
           ),
       ),
 
@@ -267,9 +267,9 @@ object ApartmentCatalog {
         longitude = 34.8000,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_sea_balcony, "Терраса с видом на Азовское море"),
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Гостиная в тёплых тонах"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Кухня-столовая"),
+            ApartmentPhoto(R.drawable.photo_apt_sea_view, "Терраса с панорамным видом на море"),
+            ApartmentPhoto(R.drawable.photo_apt_living_1, "Гостиная в тёплых тонах"),
+            ApartmentPhoto(R.drawable.photo_apt_kitchen, "Светлая кухня-столовая"),
           ),
       ),
       Apartment(
@@ -297,9 +297,9 @@ object ApartmentCatalog {
         longitude = 32.9120,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_studio_warm, "Светлая спальня-гостиная"),
-            ApartmentPhoto(R.drawable.img_apt_sea_balcony, "Выход на балкон"),
-            ApartmentPhoto(R.drawable.img_apt_facade_south, "Кирпичный дом у парка"),
+            ApartmentPhoto(R.drawable.photo_apt_living_2, "Светлая гостиная с паркетом"),
+            ApartmentPhoto(R.drawable.photo_apt_sea_view, "Выход к морю и набережной"),
+            ApartmentPhoto(R.drawable.photo_apt_bedroom, "Спальная комната"),
           ),
       ),
       Apartment(
@@ -327,9 +327,9 @@ object ApartmentCatalog {
         longitude = 33.3600,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_family_lounge, "Просторная гостиная"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Современная кухня"),
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Спальная комната"),
+            ApartmentPhoto(R.drawable.photo_apt_kitchen, "Современная кухня"),
+            ApartmentPhoto(R.drawable.photo_apt_living_1, "Просторная гостиная"),
+            ApartmentPhoto(R.drawable.photo_apt_bedroom, "Уютная спальня"),
           ),
       ),
       Apartment(
@@ -357,9 +357,9 @@ object ApartmentCatalog {
         longitude = 34.8350,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_sea_balcony, "Морской бриз с террасы"),
-            ApartmentPhoto(R.drawable.img_apt_studio_warm, "Интерьер студии"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Кухонный блок"),
+            ApartmentPhoto(R.drawable.photo_apt_sea_view, "Морской бриз с террасы"),
+            ApartmentPhoto(R.drawable.photo_apt_bedroom, "Интерьер студии"),
+            ApartmentPhoto(R.drawable.photo_apt_living_2, "Гостиная зона"),
           ),
       ),
 
@@ -389,9 +389,9 @@ object ApartmentCatalog {
         longitude = 36.7987,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_sea_balcony, "Панорама на Бердянский залив"),
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Гостиная с мебелью"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Оборудованная кухня"),
+            ApartmentPhoto(R.drawable.photo_apt_sea_view, "Видовая терраса у моря"),
+            ApartmentPhoto(R.drawable.photo_apt_living_1, "Гостиная с мебелью"),
+            ApartmentPhoto(R.drawable.photo_apt_kitchen, "Оборудованная кухня"),
           ),
       ),
       Apartment(
@@ -419,9 +419,9 @@ object ApartmentCatalog {
         longitude = 36.7850,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Жилая комната"),
-            ApartmentPhoto(R.drawable.img_apt_studio_warm, "Зона отдыха"),
-            ApartmentPhoto(R.drawable.img_apt_facade_south, "Дом на проспекте"),
+            ApartmentPhoto(R.drawable.photo_apt_living_2, "Светлая жилая комната"),
+            ApartmentPhoto(R.drawable.photo_apt_bedroom, "Зона отдыха"),
+            ApartmentPhoto(R.drawable.photo_apt_facade_2, "Современный жилой комплекс"),
           ),
       ),
       Apartment(
@@ -449,9 +449,9 @@ object ApartmentCatalog {
         longitude = 36.3510,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_family_lounge, "Семейная гостиная"),
-            ApartmentPhoto(R.drawable.img_apt_kitchen_modern, "Кухня 11 м²"),
-            ApartmentPhoto(R.drawable.img_apt_sea_balcony, "Светлый балкон"),
+            ApartmentPhoto(R.drawable.photo_apt_kitchen, "Просторная кухня-столовая"),
+            ApartmentPhoto(R.drawable.photo_apt_living_1, "Семейная гостиная"),
+            ApartmentPhoto(R.drawable.photo_apt_sea_view, "Вид с террасы"),
           ),
       ),
       Apartment(
@@ -479,9 +479,9 @@ object ApartmentCatalog {
         longitude = 34.6558,
         photos =
           listOf(
-            ApartmentPhoto(R.drawable.img_apt_living_sunlit, "Светлая гостиная"),
-            ApartmentPhoto(R.drawable.img_apt_family_lounge, "Вторая комната"),
-            ApartmentPhoto(R.drawable.img_apt_facade_south, "Многоэтажный дом"),
+            ApartmentPhoto(R.drawable.photo_apt_living_1, "Светлая гостиная"),
+            ApartmentPhoto(R.drawable.photo_apt_living_2, "Вторая комната"),
+            ApartmentPhoto(R.drawable.photo_apt_facade_2, "Многоэтажный дом"),
           ),
       ),
     )

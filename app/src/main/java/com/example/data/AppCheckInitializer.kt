@@ -21,35 +21,43 @@ fun configureAppCheck(context: Context, intent: Intent?) {
       FirebaseApp.initializeApp(context)
     }
 
-    if (BuildConfig.DEBUG) {
-      val debugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)
-      if (!debugToken.isNullOrEmpty()) {
-        val persistenceKey = FirebaseApp.getInstance().persistenceKey
-        val prefs =
-          context.getSharedPreferences("$DEBUG_STORE_PREFIX$persistenceKey", Context.MODE_PRIVATE)
-        prefs.edit().putString(DEBUG_SECRET_KEY, debugToken).commit()
-        Log.d(TAG, "App Check debug secret configured successfully.")
-      } else {
-        Log.w(TAG, "No debug token found in Intent extra.")
-      }
+    val appCheck = FirebaseAppCheck.getInstance()
+    val resId =
+      context.resources.getIdentifier(RECAPTCHA_SITE_KEY_RES, "string", context.packageName)
+    val recaptchaSiteKey = if (resId != 0) context.getString(resId).trim() else ""
 
-      FirebaseAppCheck.getInstance()
-        .installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
-      Log.d(TAG, "DebugAppCheckProviderFactory installed.")
-    } else {
-      val resId =
-        context.resources.getIdentifier(RECAPTCHA_SITE_KEY_RES, "string", context.packageName)
-      if (resId != 0) {
-        val siteKey = context.getString(resId)
-        if (siteKey.isNotBlank()) {
-          FirebaseAppCheck.getInstance()
-            .installAppCheckProviderFactory(RecaptchaAppCheckProviderFactory.getInstance(siteKey))
-          Log.d(TAG, "RecaptchaAppCheckProviderFactory installed.")
-        } else {
-          Log.e(TAG, "recaptcha_site_key resource string is blank.")
-        }
+    if (BuildConfig.DEBUG) {
+      val persistenceKey = FirebaseApp.getInstance().persistenceKey
+      val prefs =
+        context.getSharedPreferences("$DEBUG_STORE_PREFIX$persistenceKey", Context.MODE_PRIVATE)
+      val debugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)
+
+      if (!debugToken.isNullOrEmpty()) {
+        // Persist synchronously before DebugAppCheckProviderFactory reads it
+        prefs.edit().putString(DEBUG_SECRET_KEY, debugToken).commit()
+        appCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
+        Log.d(TAG, "DebugAppCheckProviderFactory installed with Intent debug token.")
+      } else if (!prefs.getString(DEBUG_SECRET_KEY, null).isNullOrEmpty()) {
+        appCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
+        Log.d(TAG, "DebugAppCheckProviderFactory installed with persisted debug token.")
+      } else if (recaptchaSiteKey.isNotBlank()) {
+        // Standalone device launch without harness debug token: use reCAPTCHA Enterprise
+        appCheck.installAppCheckProviderFactory(
+          RecaptchaAppCheckProviderFactory.getInstance(recaptchaSiteKey)
+        )
+        Log.d(TAG, "RecaptchaAppCheckProviderFactory installed for standalone device launch.")
       } else {
-        Log.e(TAG, "recaptcha_site_key string resource not found in package.")
+        appCheck.installAppCheckProviderFactory(DebugAppCheckProviderFactory.getInstance())
+        Log.w(TAG, "No debug token or recaptcha_site_key found; falling back to DebugAppCheck.")
+      }
+    } else {
+      if (recaptchaSiteKey.isNotBlank()) {
+        appCheck.installAppCheckProviderFactory(
+          RecaptchaAppCheckProviderFactory.getInstance(recaptchaSiteKey)
+        )
+        Log.d(TAG, "RecaptchaAppCheckProviderFactory installed.")
+      } else {
+        Log.e(TAG, "recaptcha_site_key resource string not found or blank.")
       }
     }
   } catch (e: Exception) {

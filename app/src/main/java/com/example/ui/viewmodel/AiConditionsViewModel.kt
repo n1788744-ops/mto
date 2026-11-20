@@ -85,11 +85,17 @@ class AiConditionsViewModel(
     val userMsgId = "u_${System.currentTimeMillis()}"
     val aiMsgId = "a_${System.currentTimeMillis() + 1}"
 
-    _messages.update { current ->
-      current +
-        AiChatMessage(id = userMsgId, isFromUser = true, text = prompt) +
-        AiChatMessage(id = aiMsgId, isFromUser = false, text = "", isStreaming = true)
-    }
+    val lastMsg = _messages.value.lastOrNull()
+    val updatedMessages =
+      if (lastMsg != null && lastMsg.isFromUser && lastMsg.text == prompt) {
+        _messages.value + AiChatMessage(id = aiMsgId, isFromUser = false, text = "", isStreaming = true)
+      } else {
+        _messages.value +
+          AiChatMessage(id = userMsgId, isFromUser = true, text = prompt) +
+          AiChatMessage(id = aiMsgId, isFromUser = false, text = "", isStreaming = true)
+      }
+
+    _messages.value = updatedMessages
 
     viewModelScope.launch {
       _uiState.value = AiUiState.Loading
@@ -134,8 +140,14 @@ class AiConditionsViewModel(
         Log.e(TAG, "Firebase AI generation failed", e)
         removeEmptyPlaceholder(aiMsgId)
         lastFailedPrompt = prompt
-        _uiState.value =
-          AiUiState.Error(e.localizedMessage ?: "Не удалось получить ответ от ИИ-консультанта.")
+        val rawMsg = e.localizedMessage ?: "Не удалось получить ответ от ИИ-консультанта."
+        val displayMsg =
+          if (rawMsg.contains("App Check", ignoreCase = true)) {
+            "Ошибка проверки App Check: $rawMsg. Убедитесь, что на устройстве есть интернет и сервисы Google Play."
+          } else {
+            rawMsg
+          }
+        _uiState.value = AiUiState.Error(displayMsg)
       }
     }
   }
