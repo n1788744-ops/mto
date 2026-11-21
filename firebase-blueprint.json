@@ -25,12 +25,12 @@
         "createdAt": {
           "type": "string",
           "format": "date-time",
-          "description": "Server timestamp when profile was created (FieldValue.serverTimestamp())."
+          "description": "Server timestamp when profile was created."
         },
         "updatedAt": {
           "type": "string",
           "format": "date-time",
-          "description": "Server timestamp when profile was updated (FieldValue.serverTimestamp())."
+          "description": "Server timestamp when profile was updated."
         }
       },
       "required": ["userId", "fullName", "phoneNumber", "preferredRegion", "createdAt", "updatedAt"]
@@ -40,95 +40,94 @@
       "description": "Saved apartment bookmark owned by a user.",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "description": "Owner Firebase Auth UID."
-        },
-        "apartmentId": {
-          "type": "string",
-          "description": "Identifier of the catalog apartment."
-        },
-        "apartmentTitle": {
-          "type": "string",
-          "description": "Title of the saved apartment."
-        },
-        "region": {
-          "type": "string",
-          "description": "Location region identifier."
-        },
-        "dealType": {
-          "type": "string",
-          "enum": ["rent", "sale"],
-          "description": "Whether the listing is for rent or sale."
-        },
-        "priceRub": {
-          "type": "integer",
-          "description": "Price in RUB."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server timestamp when saved (FieldValue.serverTimestamp())."
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
-        }
+        "userId": { "type": "string" },
+        "apartmentId": { "type": "string" },
+        "apartmentTitle": { "type": "string" },
+        "region": { "type": "string" },
+        "dealType": { "type": "string", "enum": ["rent", "sale"] },
+        "priceRub": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "apartmentId", "apartmentTitle", "region", "dealType", "priceRub", "createdAt", "updatedAt"]
     },
     "PaymentBooking": {
       "title": "PaymentBooking",
-      "description": "Apartment booking or YooMoney payment record owned by a user.",
+      "description": "Apartment booking and YooMoney anti-fraud payment verification record owned by a user.",
       "type": "object",
       "properties": {
-        "userId": {
+        "userId": { "type": "string" },
+        "apartmentId": { "type": "string" },
+        "apartmentTitle": { "type": "string" },
+        "dealType": { "type": "string", "enum": ["rent", "sale"] },
+        "amountRub": { "type": "integer" },
+        "yoomoneyWallet": { "type": "string" },
+        "paymentLabel": {
           "type": "string",
-          "description": "Owner Firebase Auth UID."
+          "description": "Unique immutable order label passed to YooMoney Quickpay to bind payment to this booking."
         },
-        "apartmentId": {
+        "paymentMethod": {
           "type": "string",
-          "description": "Identifier of the booked apartment."
-        },
-        "apartmentTitle": {
-          "type": "string",
-          "description": "Title of the booked apartment."
-        },
-        "dealType": {
-          "type": "string",
-          "enum": ["rent", "sale"],
-          "description": "Rental or purchase deal type."
-        },
-        "amountRub": {
-          "type": "integer",
-          "description": "Payment or deposit amount in RUB."
-        },
-        "yoomoneyWallet": {
-          "type": "string",
-          "description": "Recipient YooMoney wallet 4100119599343199."
+          "enum": ["AC", "PC"],
+          "description": "AC = bank card, PC = YooMoney wallet."
         },
         "status": {
           "type": "string",
-          "enum": ["pending_payment", "confirmed", "cancelled"],
-          "description": "Booking payment status."
+          "enum": ["awaiting_payment", "pending_verification", "verified_paid", "verification_failed", "cancelled"]
         },
-        "comment": {
-          "type": "string",
-          "description": "Optional customer note."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server timestamp when created (FieldValue.serverTimestamp())."
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server timestamp when updated (FieldValue.serverTimestamp())."
-        }
+        "comment": { "type": "string" },
+        "submittedOperationId": { "type": "string" },
+        "yoomoneyOperationId": { "type": "string" },
+        "verifiedAmountRub": { "type": "integer" },
+        "verificationNote": { "type": "string" },
+        "verificationAttempts": { "type": "integer" },
+        "checkoutOpenedAt": { "type": "string", "format": "date-time" },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["userId", "apartmentId", "apartmentTitle", "dealType", "amountRub", "yoomoneyWallet", "status", "createdAt", "updatedAt"]
+      "required": [
+        "userId",
+        "apartmentId",
+        "apartmentTitle",
+        "dealType",
+        "amountRub",
+        "yoomoneyWallet",
+        "paymentLabel",
+        "paymentMethod",
+        "status",
+        "verificationAttempts",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UsedYooMoneyOperation": {
+      "title": "UsedYooMoneyOperation",
+      "description": "Immutable anti-replay ledger preventing one YooMoney operation_id from confirming multiple bookings.",
+      "type": "object",
+      "properties": {
+        "operationId": { "type": "string" },
+        "bookingId": { "type": "string" },
+        "claimedByUid": { "type": "string" },
+        "amountRub": { "type": "integer" },
+        "wallet": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["operationId", "bookingId", "claimedByUid", "amountRub", "wallet", "createdAt"]
+    },
+    "KnowledgeArticle": {
+      "title": "KnowledgeArticle",
+      "description": "Company knowledge base article powering the YugDom API Consultant.",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string" },
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "priority": { "type": "integer" }
+      },
+      "required": ["articleId", "category", "title", "summary", "keywords", "priority"]
     }
   },
   "firestore": {
@@ -142,7 +141,15 @@
     },
     "/users/{userId}/bookings/{bookingId}": {
       "schema": { "$ref": "#/entities/PaymentBooking" },
-      "description": "Customer's apartment bookings and YooMoney payment records."
+      "description": "Customer's apartment bookings with YooMoney anti-fraud verification state."
+    },
+    "/used_operations/{operationId}": {
+      "schema": { "$ref": "#/entities/UsedYooMoneyOperation" },
+      "description": "Write-once anti-replay ledger for verified YooMoney operation IDs."
+    },
+    "/consultant_kb/{articleId}": {
+      "schema": { "$ref": "#/entities/KnowledgeArticle" },
+      "description": "Read-only company knowledge base articles for the YugDom Consultant API."
     }
   }
 }

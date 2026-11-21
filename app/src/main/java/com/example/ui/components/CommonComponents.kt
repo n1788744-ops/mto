@@ -27,11 +27,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,6 +41,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,10 +78,10 @@ import com.example.data.YOO_MONEY_PAY_URL
 import com.example.data.YOO_MONEY_WALLET
 import com.example.data.formatRub
 
-fun openYooMoneyInBrowser(context: Context) {
-  val payIntent = Intent(Intent.ACTION_VIEW, Uri.parse(YOO_MONEY_PAY_URL))
+fun openUriInBrowser(context: Context, uri: Uri) {
+  val intent = Intent(Intent.ACTION_VIEW, uri)
   try {
-    context.startActivity(payIntent)
+    context.startActivity(intent)
   } catch (_: ActivityNotFoundException) {
     try {
       context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(YOO_MONEY_HOME_URL)))
@@ -91,6 +94,10 @@ fun openYooMoneyInBrowser(context: Context) {
         .show()
     }
   }
+}
+
+fun openYooMoneyInBrowser(context: Context) {
+  openUriInBrowser(context, Uri.parse(YOO_MONEY_PAY_URL))
 }
 
 @Composable
@@ -309,7 +316,7 @@ fun YooMoneyPaymentSheet(
   apartment: Apartment,
   isSubmitting: Boolean,
   onDismiss: () -> Unit,
-  onSubmitAndPay: (amountRub: Long, comment: String?) -> Unit,
+  onSubmitAndPay: (amountRub: Long, paymentMethod: String, comment: String?) -> Unit,
 ) {
   val context = LocalContext.current
   val clipboard = LocalClipboardManager.current
@@ -317,9 +324,12 @@ fun YooMoneyPaymentSheet(
   var amountText by remember(apartment.id) {
     mutableStateOf(apartment.depositOrBookingRub.toString())
   }
+  var paymentMethod by remember(apartment.id) { mutableStateOf("AC") }
   var comment by remember(apartment.id) { mutableStateOf("") }
 
+  val minAmount = apartment.depositOrBookingRub
   val parsedAmount = amountText.filter { it.isDigit() }.toLongOrNull() ?: 0L
+  val isAmountValid = parsedAmount >= minAmount
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -331,7 +341,7 @@ fun YooMoneyPaymentSheet(
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Text(
-        text = "Оплата через ЮMoney",
+        text = "Защищённая оплата ЮMoney",
         style = MaterialTheme.typography.headlineMedium,
         color = MaterialTheme.colorScheme.onSurface,
       )
@@ -353,7 +363,7 @@ fun YooMoneyPaymentSheet(
         ) {
           Column(modifier = Modifier.weight(1f)) {
             Text(
-              text = "Кошелёк получателя ЮMoney",
+              text = "Официальный счёт ЮMoney",
               style = MaterialTheme.typography.labelMedium,
               color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -384,14 +394,41 @@ fun YooMoneyPaymentSheet(
         }
       }
 
+      // Payment method choice (Card AC vs YooMoney Wallet PC)
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        FilterChip(
+          selected = paymentMethod == "AC",
+          onClick = { paymentMethod = "AC" },
+          leadingIcon = { Icon(Icons.Filled.CreditCard, contentDescription = null, modifier = Modifier.size(18.dp)) },
+          label = { Text("Банковская карта") },
+          modifier = Modifier.weight(1f).testTag("pay_method_ac"),
+        )
+        FilterChip(
+          selected = paymentMethod == "PC",
+          onClick = { paymentMethod = "PC" },
+          leadingIcon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(18.dp)) },
+          label = { Text("Кошелёк ЮMoney") },
+          modifier = Modifier.weight(1f).testTag("pay_method_pc"),
+        )
+      }
+
       OutlinedTextField(
         value = amountText,
         onValueChange = { input -> amountText = input.filter { it.isDigit() }.take(9) },
         label = {
           Text(
-            if (apartment.dealType == DealType.RENT) "Сумма аренды / залога (₽)"
-            else "Сумма задатка бронирования (₽)"
+            if (apartment.dealType == DealType.RENT) "Сумма аренды / залога (мин. ${formatRub(minAmount)} ₽)"
+            else "Сумма задатка бронирования (мин. ${formatRub(minAmount)} ₽)"
           )
+        },
+        isError = !isAmountValid,
+        supportingText = {
+          if (!isAmountValid) {
+            Text("Минимальная сумма по условиям объекта: ${formatRub(minAmount)} ₽")
+          }
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
@@ -409,14 +446,37 @@ fun YooMoneyPaymentSheet(
         modifier = Modifier.fillMaxWidth().testTag("yoomoney_comment_input"),
       )
 
+      Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Row(
+          modifier = Modifier.padding(10.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          Icon(
+            imageVector = Icons.Filled.VerifiedUser,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(18.dp),
+          )
+          Text(
+            text = "Заявка получает уникальный код заказа (label). Возврат без перевода не подтверждает бронь — оплата сверяется по API ЮMoney.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+          )
+        }
+      }
+
       Button(
         onClick = {
-          if (parsedAmount > 0L) {
-            onSubmitAndPay(parsedAmount, comment)
-            openYooMoneyInBrowser(context)
+          if (isAmountValid) {
+            onSubmitAndPay(parsedAmount, paymentMethod, comment)
           }
         },
-        enabled = parsedAmount > 0L && !isSubmitting,
+        enabled = isAmountValid && !isSubmitting,
         modifier =
           Modifier
             .fillMaxWidth()

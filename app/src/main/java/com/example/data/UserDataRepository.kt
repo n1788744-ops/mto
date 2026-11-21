@@ -13,6 +13,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import java.util.UUID
 
 class UserDataRepository(
   private val db: FirebaseFirestore,
@@ -171,17 +172,22 @@ class UserDataRepository(
     userId: String,
     apartment: Apartment,
     amountRub: Long,
+    paymentMethod: String,
     comment: String?,
-  ): Result<String> {
+  ): Result<PaymentBooking> {
     var docPath = "users/$userId/bookings"
     return try {
       val uid = requireUserId()
       check(uid == userId) { "Отказ в создании брони для другого пользователя." }
-      require(amountRub > 0L) { "Сумма оплаты должна быть больше 0 ₽." }
+      require(amountRub >= apartment.depositOrBookingRub) {
+        "Минимальная сумма бронирования: ${formatRub(apartment.depositOrBookingRub)} ₽."
+      }
+      val resolvedMethod = if (paymentMethod == "PC") "PC" else "AC"
 
       val docRef = db.collection("users").document(uid).collection("bookings").document()
       docPath = docRef.path
       val cleanComment = comment?.trim()?.take(300)?.takeIf { it.isNotEmpty() }
+      val paymentLabel = generatePaymentLabel(uid)
 
       val payload =
         mapOf(
@@ -191,14 +197,34 @@ class UserDataRepository(
           "dealType" to apartment.dealType.code,
           "amountRub" to amountRub,
           "yoomoneyWallet" to YOO_MONEY_WALLET,
-          "status" to "pending_payment",
+          "paymentLabel" to paymentLabel,
+          "paymentMethod" to resolvedMethod,
+          "status" to BookingStatus.AWAITING_PAYMENT,
           "comment" to cleanComment,
+          "verificationAttempts" to 0L,
+          "checkoutOpenedAt" to FieldValue.serverTimestamp(),
           "createdAt" to FieldValue.serverTimestamp(),
           "updatedAt" to FieldValue.serverTimestamp(),
         ).filterValues { it != null }
 
       docRef.set(payload).await()
-      Result.success(docRef.id)
+
+      val createdBooking =
+        PaymentBooking(
+          id = docRef.id,
+          userId = uid,
+          apartmentId = apartment.id,
+          apartmentTitle = apartment.title.take(120),
+          dealType = apartment.dealType.code,
+          amountRub = amountRub,
+          yoomoneyWallet = YOO_MONEY_WALLET,
+          paymentLabel = paymentLabel,
+          paymentMethod = resolvedMethod,
+          status = BookingStatus.AWAITING_PAYMENT,
+          comment = cleanComment,
+          verificationAttempts = 0L,
+        )
+      Result.success(createdBooking)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
@@ -207,23 +233,18 @@ class UserDataRepository(
     }
   }
 
-  suspend fun updateBookingStatus(
-    userId: String,
-    bookingId: String,
-    newStatus: String,
-  ): Result<Unit> {
+  suspend fun markCheckoutOpened(userId: String, bookingId: String): Result<Unit> {
     val path = "users/$userId/bookings/$bookingId"
     return try {
       val uid = requireUserId()
-      check(uid == userId) { "Отказ в изменении чужой заявки." }
-      require(newStatus in listOf("confirmed", "cancelled")) { "Недопустимый статус заявки." }
+      check(uid == userId) { "Отказ в доступе к чужой заявке." }
       db.collection("users")
         .document(uid)
         .collection("bookings")
         .document(bookingId)
         .update(
           mapOf(
-            "status" to newStatus,
+            "checkoutOpenedAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp(),
           )
         )
@@ -235,5 +256,192 @@ class UserDataRepository(
       handleFirestoreError(e, OperationType.UPDATE, path)
       Result.failure(e)
     }
+  }
+
+  suspend fun isOperationAlreadyUsed(operationId: String): Boolean {
+    val cleanId = operationId.trim()
+    if (cleanId.isEmpty()) return false
+    return try {
+      db.collection("used_operations").document(cleanId).get().await().exists()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.GET, "used_operations/$cleanId")
+      false
+    }
+  }
+
+  suspend fun submitReceiptForVerification(
+    userId: String,
+    bookingId: String,
+    operationId: String,
+  ): Result<Unit> {
+    val path = "users/$userId/bookings/$bookingId"
+    return try {
+      val uid = requireUserId()
+      check(uid == userId) { "Отказ в изменении чужой заявки." }
+      val cleanOp = operationId.trim().take(64)
+      require(cleanOp.length >= 6 && cleanOp.matches(Regex("^[a-zA-Z0-9_.\\-]+$"))) {
+        "Введите корректный номер операции ЮMoney (минимум 6 символов: буквы, цифры, - или _)."
+      }
+      if (isOperationAlreadyUsed(cleanOp)) {
+        return Result.failure(
+          SecurityException(
+            "Этот номер операции ($cleanOp) уже использовался ранее для другой брони. Повторное использование запрещено."
+          )
+        )
+      }
+
+      db.collection("users")
+        .document(uid)
+        .collection("bookings")
+        .document(bookingId)
+        .update(
+          mapOf(
+            "status" to BookingStatus.PENDING_VERIFICATION,
+            "submittedOperationId" to cleanOp,
+            "verificationNote" to
+              "Чек $cleanOp отправлен на проверку. Бронь подтвердится только после сверки с ЮMoney.",
+            "updatedAt" to FieldValue.serverTimestamp(),
+          )
+        )
+        .await()
+      Result.success(Unit)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.UPDATE, path)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun recordVerificationFailure(
+    userId: String,
+    bookingId: String,
+    currentAttempts: Long,
+    reason: String,
+  ): Result<Unit> {
+    val path = "users/$userId/bookings/$bookingId"
+    return try {
+      val uid = requireUserId()
+      check(uid == userId) { "Отказ в изменении чужой заявки." }
+      db.collection("users")
+        .document(uid)
+        .collection("bookings")
+        .document(bookingId)
+        .update(
+          mapOf(
+            "status" to BookingStatus.VERIFICATION_FAILED,
+            "verificationAttempts" to (currentAttempts + 1L),
+            "verificationNote" to reason.take(300),
+            "updatedAt" to FieldValue.serverTimestamp(),
+          )
+        )
+        .await()
+      Result.success(Unit)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.UPDATE, path)
+      Result.failure(e)
+    }
+  }
+
+  /**
+   * Atomically locks the verified YooMoney operation_id in `/used_operations/{operationId}`
+   * and transitions the booking to `verified_paid`. Prevents replay fraud across bookings/users.
+   */
+  suspend fun confirmVerifiedPaymentAtomic(
+    userId: String,
+    booking: PaymentBooking,
+    operationId: String,
+    verifiedAmountRub: Long,
+    note: String,
+  ): Result<Unit> {
+    val path = "users/$userId/bookings/${booking.id}"
+    return try {
+      val uid = requireUserId()
+      check(uid == userId) { "Отказ в подтверждении чужой заявки." }
+      val cleanOp = operationId.trim()
+      require(cleanOp.length >= 6 && cleanOp.matches(Regex("^[a-zA-Z0-9_.\\-]+$"))) {
+        "Некорректный ID операции ЮMoney."
+      }
+      require(verifiedAmountRub >= booking.amountRub) {
+        "Сумма транзакции ($verifiedAmountRub ₽) меньше суммы заявки (${booking.amountRub} ₽)."
+      }
+      if (isOperationAlreadyUsed(cleanOp)) {
+        return Result.failure(
+          SecurityException("Операция $cleanOp уже была использована ранее (блокировка повтора).")
+        )
+      }
+
+      val bookingRef = db.collection("users").document(uid).collection("bookings").document(booking.id)
+      val usedOpRef = db.collection("used_operations").document(cleanOp)
+
+      db.batch()
+        .set(
+          usedOpRef,
+          mapOf(
+            "operationId" to cleanOp,
+            "bookingId" to booking.id,
+            "claimedByUid" to uid,
+            "amountRub" to verifiedAmountRub,
+            "wallet" to YOO_MONEY_WALLET,
+            "createdAt" to FieldValue.serverTimestamp(),
+          ),
+        )
+        .update(
+          bookingRef,
+          mapOf(
+            "status" to BookingStatus.VERIFIED_PAID,
+            "yoomoneyOperationId" to cleanOp,
+            "verifiedAmountRub" to verifiedAmountRub,
+            "verificationNote" to note.take(300),
+            "verifiedAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp(),
+          ),
+        )
+        .commit()
+        .await()
+
+      Result.success(Unit)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.WRITE, path)
+      Result.failure(e)
+    }
+  }
+
+  suspend fun cancelBooking(userId: String, bookingId: String): Result<Unit> {
+    val path = "users/$userId/bookings/$bookingId"
+    return try {
+      val uid = requireUserId()
+      check(uid == userId) { "Отказ в изменении чужой заявки." }
+      db.collection("users")
+        .document(uid)
+        .collection("bookings")
+        .document(bookingId)
+        .update(
+          mapOf(
+            "status" to BookingStatus.CANCELLED,
+            "verificationNote" to "Заявка отменена пользователем",
+            "updatedAt" to FieldValue.serverTimestamp(),
+          )
+        )
+        .await()
+      Result.success(Unit)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      handleFirestoreError(e, OperationType.UPDATE, path)
+      Result.failure(e)
+    }
+  }
+
+  private fun generatePaymentLabel(uid: String): String {
+    val shortUid = uid.filter { it.isLetterOrDigit() }.take(6).ifEmpty { "USER" }
+    val nonce = UUID.randomUUID().toString().replace("-", "").take(10).uppercase()
+    return "YD_${shortUid}_$nonce"
   }
 }

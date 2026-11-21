@@ -7,7 +7,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_.\\-]+$');
     }
 
     function incoming() {
@@ -46,17 +46,42 @@ service cloud.firestore {
              data.updatedAt is timestamp && data.updatedAt <= request.time;
     }
 
-    function isValidBooking(data, userId) {
+    function isValidBookingBase(data, userId) {
       return data.userId is string && data.userId == userId &&
              data.apartmentId is string && data.apartmentId.size() >= 1 && data.apartmentId.size() <= 64 &&
              data.apartmentTitle is string && data.apartmentTitle.size() >= 1 && data.apartmentTitle.size() <= 120 &&
              data.dealType in ['rent', 'sale'] &&
              data.amountRub is int && data.amountRub > 0 &&
              data.yoomoneyWallet is string && data.yoomoneyWallet == '4100119599343199' &&
-             data.status in ['pending_payment', 'confirmed', 'cancelled'] &&
+             data.paymentLabel is string && data.paymentLabel.size() >= 10 && data.paymentLabel.size() <= 64 &&
+             data.paymentLabel.matches('^[a-zA-Z0-9_\\-]+$') &&
+             data.paymentMethod in ['AC', 'PC'] &&
+             data.status in ['awaiting_payment', 'pending_verification', 'verified_paid', 'verification_failed', 'cancelled'] &&
+             data.verificationAttempts is int && data.verificationAttempts >= 0 &&
              (!('comment' in data) || (data.comment is string && data.comment.size() <= 300)) &&
+             (!('submittedOperationId' in data) || (data.submittedOperationId is string && data.submittedOperationId.size() >= 6 && data.submittedOperationId.size() <= 64)) &&
+             (!('yoomoneyOperationId' in data) || (data.yoomoneyOperationId is string && isValidId(data.yoomoneyOperationId) && data.yoomoneyOperationId.size() >= 6 && data.yoomoneyOperationId.size() <= 64)) &&
+             (!('verifiedAmountRub' in data) || (data.verifiedAmountRub is int && data.verifiedAmountRub > 0)) &&
+             (!('verificationNote' in data) || (data.verificationNote is string && data.verificationNote.size() <= 300)) &&
+             (!('checkoutOpenedAt' in data) || (data.checkoutOpenedAt is timestamp && data.checkoutOpenedAt <= request.time)) &&
+             (!('verifiedAt' in data) || (data.verifiedAt is timestamp && data.verifiedAt <= request.time)) &&
              data.createdAt is timestamp && data.createdAt <= request.time &&
              data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidVerifiedPaidTransition(data, prev) {
+      return data.status == 'verified_paid' &&
+             'yoomoneyOperationId' in data &&
+             'verifiedAmountRub' in data &&
+             'verifiedAt' in data &&
+             data.verifiedAmountRub >= prev.amountRub &&
+             existsAfter(/databases/$(database)/documents/used_operations/$(data.yoomoneyOperationId));
+    }
+
+    function isValidNonPaidTransition(data, prev) {
+      return (data.status == 'awaiting_payment' || data.status == 'cancelled') ||
+             (data.status == 'pending_verification' && 'submittedOperationId' in data) ||
+             (data.status == 'verification_failed' && data.verificationAttempts >= prev.verificationAttempts);
     }
 
     match /users/{userId} {
@@ -105,23 +130,60 @@ service cloud.firestore {
 
         allow create: if isOwner(userId) &&
                          isValidId(bookingId) &&
-                         incoming().keys().hasAll(['userId', 'apartmentId', 'apartmentTitle', 'dealType', 'amountRub', 'yoomoneyWallet', 'status', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['userId', 'apartmentId', 'apartmentTitle', 'dealType', 'amountRub', 'yoomoneyWallet', 'status', 'comment', 'createdAt', 'updatedAt']) &&
-                         incoming().status == 'pending_payment' &&
-                         isValidBooking(incoming(), userId);
+                         incoming().keys().hasAll(['userId', 'apartmentId', 'apartmentTitle', 'dealType', 'amountRub', 'yoomoneyWallet', 'paymentLabel', 'paymentMethod', 'status', 'verificationAttempts', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'apartmentId', 'apartmentTitle', 'dealType', 'amountRub', 'yoomoneyWallet', 'paymentLabel', 'paymentMethod', 'status', 'comment', 'verificationAttempts', 'checkoutOpenedAt', 'createdAt', 'updatedAt']) &&
+                         incoming().status == 'awaiting_payment' &&
+                         incoming().verificationAttempts == 0 &&
+                         isValidBookingBase(incoming(), userId);
 
         allow update: if isOwner(userId) &&
                          isValidId(bookingId) &&
-                         existing().status == 'pending_payment' &&
-                         isValidBooking(incoming(), userId) &&
+                         existing().status in ['awaiting_payment', 'pending_verification', 'verification_failed'] &&
+                         isValidBookingBase(incoming(), userId) &&
                          incoming().userId == existing().userId &&
                          incoming().apartmentId == existing().apartmentId &&
+                         incoming().dealType == existing().dealType &&
+                         incoming().amountRub == existing().amountRub &&
                          incoming().yoomoneyWallet == existing().yoomoneyWallet &&
+                         incoming().paymentLabel == existing().paymentLabel &&
                          incoming().createdAt == existing().createdAt &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'comment', 'updatedAt']);
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'status', 'paymentMethod', 'comment', 'submittedOperationId',
+                           'yoomoneyOperationId', 'verifiedAmountRub', 'verificationNote',
+                           'verificationAttempts', 'checkoutOpenedAt', 'verifiedAt', 'updatedAt'
+                         ]) &&
+                         (isValidVerifiedPaidTransition(incoming(), existing()) ||
+                          isValidNonPaidTransition(incoming(), existing()));
 
         allow delete: if isOwner(userId) && isValidId(bookingId);
       }
+    }
+
+    // Write-once anti-replay ledger: a YooMoney operation_id can be claimed at most once globally.
+    match /used_operations/{operationId} {
+      allow get: if isSignedIn() && isValidId(operationId);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(operationId) &&
+                       operationId.size() >= 6 &&
+                       incoming().keys().hasAll(['operationId', 'bookingId', 'claimedByUid', 'amountRub', 'wallet', 'createdAt']) &&
+                       incoming().keys().hasOnly(['operationId', 'bookingId', 'claimedByUid', 'amountRub', 'wallet', 'createdAt']) &&
+                       incoming().operationId == operationId &&
+                       incoming().claimedByUid == request.auth.uid &&
+                       incoming().wallet == '4100119599343199' &&
+                       incoming().amountRub is int && incoming().amountRub > 0 &&
+                       incoming().bookingId is string && incoming().bookingId.size() >= 1 && incoming().bookingId.size() <= 128 &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time;
+
+      allow update, delete: if false;
+    }
+
+    // Read-only company knowledge base articles for the YugDom Consultant API.
+    match /consultant_kb/{articleId} {
+      allow get: if isSignedIn() && isValidId(articleId);
+      allow list: if isSignedIn();
+      allow write: if false;
     }
   }
 }

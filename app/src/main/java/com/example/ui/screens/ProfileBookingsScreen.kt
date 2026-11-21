@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,12 +25,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -57,12 +61,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.Apartment
 import com.example.data.ApartmentCatalog
+import com.example.data.BookingStatus
 import com.example.data.FavoriteApartment
 import com.example.data.PaymentBooking
 import com.example.data.RegionFilter
 import com.example.data.UserProfile
+import com.example.data.YOO_MONEY_OAUTH_REDIRECT_URI
 import com.example.data.YOO_MONEY_WALLET
+import com.example.data.YooMoneyMerchantStatus
 import com.example.data.formatRub
+import com.example.ui.components.openUriInBrowser
 import com.example.ui.components.openYooMoneyInBrowser
 import com.example.ui.viewmodel.DataUiState
 
@@ -72,11 +80,19 @@ fun ProfileBookingsScreen(
   profile: UserProfile,
   favoritesState: DataUiState<List<FavoriteApartment>>,
   bookingsState: DataUiState<List<PaymentBooking>>,
+  yooMoneyStatus: YooMoneyMerchantStatus,
+  isConnectingMerchant: Boolean,
+  verifyingBookingId: String?,
   isSavingProfile: Boolean,
   onSaveProfile: (fullName: String, phoneNumber: String, preferredRegion: RegionFilter) -> Unit,
   onOpenApartment: (Apartment) -> Unit,
-  onConfirmPayment: (bookingId: String) -> Unit,
+  onPayBookingCheckout: (PaymentBooking) -> Unit,
+  onVerifyBookingApi: (PaymentBooking) -> Unit,
+  onSubmitManualOperationId: (PaymentBooking, String) -> Unit,
   onCancelBooking: (bookingId: String) -> Unit,
+  onStartYooMoneyOAuth: () -> Result<Uri>,
+  onConnectYooMoneyCode: (String) -> Unit,
+  onDisconnectYooMoneyOAuth: () -> Unit,
   onSignOut: () -> Unit,
 ) {
   val context = LocalContext.current
@@ -87,6 +103,8 @@ fun ProfileBookingsScreen(
   var preferredRegion by remember(profile.preferredRegion) {
     mutableStateOf(RegionFilter.fromCode(profile.preferredRegion))
   }
+  var showOAuthCodeField by remember { mutableStateOf(false) }
+  var oauthCodeInput by remember { mutableStateOf("") }
 
   LazyColumn(
     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -174,7 +192,7 @@ fun ProfileBookingsScreen(
       }
     }
 
-    // Direct YooMoney Card
+    // YooMoney Wallet & Anti-Fraud OAuth2 Control Card
     item {
       Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -182,24 +200,48 @@ fun ProfileBookingsScreen(
         modifier = Modifier.fillMaxWidth(),
       ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-              Icons.Filled.AccountBalanceWallet,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-              text = "Быстрая оплата ЮMoney",
-              style = MaterialTheme.typography.titleMedium,
-              color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Icon(
+                Icons.Filled.Security,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+              )
+              Spacer(modifier = Modifier.width(8.dp))
+              Text(
+                text = "ЮMoney и защита платежей",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+              )
+            }
+            if (yooMoneyStatus.isConnected) {
+              Surface(
+                color = MaterialTheme.colorScheme.tertiary,
+                shape = RoundedCornerShape(8.dp),
+              ) {
+                Text(
+                  text = "API активен",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onTertiary,
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+              }
+            }
           }
+
           Text(
-            text = "Кошелёк: $YOO_MONEY_WALLET\nСайт: https://yoomoney.ru",
-            style = MaterialTheme.typography.bodyMedium,
+            text = "Кошелёк получателя: $YOO_MONEY_WALLET (https://yoomoney.ru)\n" +
+              "• Уникальный код заявки (label) на каждый платёж\n" +
+              "• Блокировка возврата из браузера без зачисления\n" +
+              "• Запрет повторного использования ID операции",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onPrimaryContainer,
           )
+
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
               onClick = {
@@ -218,7 +260,116 @@ fun ProfileBookingsScreen(
             ) {
               Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Платить")
+              Text("ЮMoney")
+            }
+          }
+
+          // OAuth2 Merchant Verification section
+          Surface(
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              if (yooMoneyStatus.isConnected) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                  Icon(
+                    Icons.Filled.VerifiedUser,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(18.dp),
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text(
+                    text = "OAuth2 API подключён: ${yooMoneyStatus.connectedWallet}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                  )
+                }
+                if (yooMoneyStatus.balanceRub != null) {
+                  Text(
+                    text = "Баланс кошелька: ${formatRub(yooMoneyStatus.balanceRub.toLong())} ₽",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                }
+                OutlinedButton(
+                  onClick = onDisconnectYooMoneyOAuth,
+                  modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                ) {
+                  Text("Отключить OAuth2 токен")
+                }
+              } else {
+                Text(
+                  text = "Проверка входящих оплат через OAuth2 API ЮMoney",
+                  style = MaterialTheme.typography.labelLarge,
+                  color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                  text =
+                    if (yooMoneyStatus.credentialsConfigured) {
+                      "Redirect URI: $YOO_MONEY_OAUTH_REDIRECT_URI"
+                    } else {
+                      "Чтобы включить авто-проверку через OAuth2 API ЮMoney, задайте YOOMONEY_CLIENT_ID и YOOMONEY_CLIENT_SECRET в AI Studio Secrets."
+                    },
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                  Button(
+                    onClick = {
+                      onStartYooMoneyOAuth().fold(
+                        onSuccess = { authUri -> openUriInBrowser(context, authUri) },
+                        onFailure = { err ->
+                          Toast.makeText(
+                              context,
+                              err.localizedMessage ?: "Секреты ЮMoney не настроены",
+                              Toast.LENGTH_LONG,
+                            )
+                            .show()
+                        },
+                      )
+                    },
+                    enabled = !isConnectingMerchant,
+                    modifier = Modifier.weight(1f).heightIn(min = 46.dp).testTag("yoomoney_oauth_connect_btn"),
+                  ) {
+                    if (isConnectingMerchant) {
+                      CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                      Text("Подключить OAuth2")
+                    }
+                  }
+                  OutlinedButton(
+                    onClick = { showOAuthCodeField = !showOAuthCodeField },
+                    modifier = Modifier.heightIn(min = 46.dp),
+                  ) {
+                    Text("Код")
+                  }
+                }
+
+                if (showOAuthCodeField) {
+                  OutlinedTextField(
+                    value = oauthCodeInput,
+                    onValueChange = { oauthCodeInput = it },
+                    label = { Text("Код или ссылка редиректа ЮMoney") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                  )
+                  Button(
+                    onClick = {
+                      onConnectYooMoneyCode(oauthCodeInput)
+                      oauthCodeInput = ""
+                      showOAuthCodeField = false
+                    },
+                    enabled = oauthCodeInput.isNotBlank() && !isConnectingMerchant,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
+                  ) {
+                    Text("Обменять код на токен")
+                  }
+                }
+              }
             }
           }
         }
@@ -228,16 +379,14 @@ fun ProfileBookingsScreen(
     // Bookings section
     item {
       Text(
-        text = "Заявки и оплаты ЮMoney",
+        text = "Заявки и верификация ЮMoney",
         style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.onBackground,
       )
     }
 
     when (bookingsState) {
-      is DataUiState.Loading -> {
-        item { CircularProgressIndicator() }
-      }
+      is DataUiState.Loading -> item { CircularProgressIndicator() }
       is DataUiState.Error -> {
         item {
           Surface(
@@ -271,85 +420,14 @@ fun ProfileBookingsScreen(
           }
         } else {
           items(bookingsState.data, key = { it.id }) { booking ->
-            val statusLabel =
-              when (booking.status) {
-                "confirmed" -> "Оплачено"
-                "cancelled" -> "Отменена"
-                else -> "Ожидает оплаты"
-              }
-            val statusContainer =
-              when (booking.status) {
-                "confirmed" -> MaterialTheme.colorScheme.tertiaryContainer
-                "cancelled" -> MaterialTheme.colorScheme.surfaceVariant
-                else -> MaterialTheme.colorScheme.primaryContainer
-              }
-            Card(
-              shape = RoundedCornerShape(16.dp),
-              colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            ) {
-              Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                  verticalAlignment = Alignment.CenterVertically,
-                ) {
-                  Text(
-                    text = "${formatRub(booking.amountRub)} ₽",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                  )
-                  Surface(color = statusContainer, shape = RoundedCornerShape(8.dp)) {
-                    Text(
-                      text = statusLabel,
-                      style = MaterialTheme.typography.labelMedium,
-                      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                  }
-                }
-                Text(
-                  text = booking.apartmentTitle,
-                  style = MaterialTheme.typography.bodyLarge,
-                  fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                  text = "ЮMoney: ${booking.yoomoneyWallet}",
-                  style = MaterialTheme.typography.labelMedium,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (!booking.comment.isNullOrBlank()) {
-                  Text(
-                    text = "Комментарий: ${booking.comment}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  )
-                }
-                if (booking.status == "pending_payment") {
-                  Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                      onClick = { openYooMoneyInBrowser(context) },
-                      modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                    ) {
-                      Text("Перейти в ЮMoney")
-                    }
-                    OutlinedButton(
-                      onClick = { onConfirmPayment(booking.id) },
-                      modifier = Modifier.heightIn(min = 48.dp),
-                    ) {
-                      Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                      Spacer(modifier = Modifier.width(4.dp))
-                      Text("Оплачено")
-                    }
-                  }
-                  OutlinedButton(
-                    onClick = { onCancelBooking(booking.id) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                  ) {
-                    Text("Отменить заявку")
-                  }
-                }
-              }
-            }
+            BookingAntiFraudCard(
+              booking = booking,
+              isVerifying = verifyingBookingId == booking.id,
+              onPayCheckout = { onPayBookingCheckout(booking) },
+              onVerifyApi = { onVerifyBookingApi(booking) },
+              onSubmitOperationId = { opId -> onSubmitManualOperationId(booking, opId) },
+              onCancel = { onCancelBooking(booking.id) },
+            )
           }
         }
       }
@@ -431,5 +509,191 @@ fun ProfileBookingsScreen(
     }
 
     item { Spacer(modifier = Modifier.height(16.dp)) }
+  }
+}
+
+@Composable
+private fun BookingAntiFraudCard(
+  booking: PaymentBooking,
+  isVerifying: Boolean,
+  onPayCheckout: () -> Unit,
+  onVerifyApi: () -> Unit,
+  onSubmitOperationId: (String) -> Unit,
+  onCancel: () -> Unit,
+) {
+  var showOpInput by remember(booking.id) { mutableStateOf(false) }
+  var opIdText by remember(booking.id) { mutableStateOf(booking.submittedOperationId.orEmpty()) }
+
+  val statusLabel =
+    when (booking.status) {
+      BookingStatus.VERIFIED_PAID -> "Подтверждено ЮMoney"
+      BookingStatus.PENDING_VERIFICATION -> "На проверке чека"
+      BookingStatus.VERIFICATION_FAILED -> "Не найдено / отказ"
+      BookingStatus.CANCELLED -> "Отменена"
+      else -> "Ожидает оплаты"
+    }
+  val statusContainer =
+    when (booking.status) {
+      BookingStatus.VERIFIED_PAID -> MaterialTheme.colorScheme.tertiaryContainer
+      BookingStatus.PENDING_VERIFICATION -> MaterialTheme.colorScheme.secondaryContainer
+      BookingStatus.VERIFICATION_FAILED -> MaterialTheme.colorScheme.errorContainer
+      BookingStatus.CANCELLED -> MaterialTheme.colorScheme.surfaceVariant
+      else -> MaterialTheme.colorScheme.primaryContainer
+    }
+  val isEditable =
+    booking.status == BookingStatus.AWAITING_PAYMENT ||
+      booking.status == BookingStatus.PENDING_VERIFICATION ||
+      booking.status == BookingStatus.VERIFICATION_FAILED
+
+  Card(
+    shape = RoundedCornerShape(16.dp),
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+  ) {
+    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text = "${formatRub(booking.amountRub)} ₽",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.primary,
+        )
+        Surface(color = statusContainer, shape = RoundedCornerShape(8.dp)) {
+          Text(
+            text = statusLabel,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+          )
+        }
+      }
+
+      Text(
+        text = booking.apartmentTitle,
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.SemiBold,
+      )
+
+      val methodLabel = if (booking.paymentMethod == "PC") "Кошелёк ЮMoney" else "Банковская карта"
+      Text(
+        text = "Метка заказа: ${booking.paymentLabel} · $methodLabel",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
+      if (!booking.comment.isNullOrBlank()) {
+        Text(
+          text = "Комментарий: ${booking.comment}",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+
+      if (!booking.verificationNote.isNullOrBlank()) {
+        Surface(
+          color =
+            if (booking.status == BookingStatus.VERIFICATION_FAILED)
+              MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f)
+            else MaterialTheme.colorScheme.surfaceVariant,
+          shape = RoundedCornerShape(10.dp),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text(
+            text = booking.verificationNote,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(8.dp),
+          )
+        }
+      }
+
+      if (booking.status == BookingStatus.VERIFIED_PAID && !booking.yoomoneyOperationId.isNullOrBlank()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            imageVector = Icons.Filled.CheckCircle,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(16.dp),
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(
+            text = "ID операции: ${booking.yoomoneyOperationId} · Проверено: ${formatRub(booking.verifiedAmountRub ?: booking.amountRub)} ₽",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.tertiary,
+            fontWeight = FontWeight.SemiBold,
+          )
+        }
+      }
+
+      if (isEditable) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          Button(
+            onClick = onPayCheckout,
+            enabled = !isVerifying,
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("booking_pay_${booking.id}"),
+          ) {
+            Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Оплатить")
+          }
+          OutlinedButton(
+            onClick = onVerifyApi,
+            enabled = !isVerifying,
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("booking_verify_${booking.id}"),
+          ) {
+            if (isVerifying) {
+              CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            } else {
+              Icon(Icons.Filled.VerifiedUser, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Проверить API")
+            }
+          }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          OutlinedButton(
+            onClick = { showOpInput = !showOpInput },
+            enabled = !isVerifying,
+            modifier = Modifier.weight(1f).heightIn(min = 46.dp),
+          ) {
+            Icon(Icons.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("ID чека")
+          }
+          OutlinedButton(
+            onClick = onCancel,
+            enabled = !isVerifying,
+            modifier = Modifier.weight(1f).heightIn(min = 46.dp),
+          ) {
+            Text("Отменить")
+          }
+        }
+
+        if (showOpInput) {
+          OutlinedTextField(
+            value = opIdText,
+            onValueChange = { opIdText = it.take(64) },
+            label = { Text("Номер операции ЮMoney из чека") },
+            placeholder = { Text("Например: 715492819201") },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().testTag("booking_op_input_${booking.id}"),
+          )
+          Button(
+            onClick = {
+              onSubmitOperationId(opIdText)
+              showOpInput = false
+            },
+            enabled = opIdText.trim().length >= 6 && !isVerifying,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
+          ) {
+            Text("Отправить на антифрод-проверку")
+          }
+        }
+      }
+    }
   }
 }

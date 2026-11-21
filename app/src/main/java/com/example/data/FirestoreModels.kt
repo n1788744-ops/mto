@@ -48,15 +48,59 @@ data class PaymentBooking(
   val dealType: String = "rent",
   val amountRub: Long = 0L,
   val yoomoneyWallet: String = YOO_MONEY_WALLET,
-  val status: String = "pending_payment",
+  val paymentLabel: String = "",
+  val paymentMethod: String = "AC",
+  val status: String = BookingStatus.AWAITING_PAYMENT,
   val comment: String? = null,
+  val submittedOperationId: String? = null,
+  val yoomoneyOperationId: String? = null,
+  val verifiedAmountRub: Long? = null,
+  val verificationNote: String? = null,
+  val verificationAttempts: Long = 0L,
+  @ServerTimestamp val checkoutOpenedAt: Timestamp? = null,
+  @ServerTimestamp val verifiedAt: Timestamp? = null,
   @ServerTimestamp val createdAt: Timestamp? = null,
   @ServerTimestamp val updatedAt: Timestamp? = null,
 )
 
+@Keep
+@IgnoreExtraProperties
+data class UsedYooMoneyOperation(
+  @DocumentId val id: String = "",
+  val operationId: String = "",
+  val bookingId: String = "",
+  val claimedByUid: String = "",
+  val amountRub: Long = 0L,
+  val wallet: String = YOO_MONEY_WALLET,
+  @ServerTimestamp val createdAt: Timestamp? = null,
+)
+
+@Keep
+@IgnoreExtraProperties
+data class KnowledgeArticle(
+  @DocumentId val id: String = "",
+  val articleId: String = "",
+  val category: String = "general",
+  val title: String = "",
+  val summary: String = "",
+  val keywords: List<String> = emptyList(),
+  val priority: Int = 0,
+)
+
+object BookingStatus {
+  const val AWAITING_PAYMENT = "awaiting_payment"
+  const val PENDING_VERIFICATION = "pending_verification"
+  const val VERIFIED_PAID = "verified_paid"
+  const val VERIFICATION_FAILED = "verification_failed"
+  const val CANCELLED = "cancelled"
+}
+
 const val YOO_MONEY_WALLET = "4100119599343199"
+const val YOO_MONEY_QUICKPAY_URL = "https://yoomoney.ru/quickpay/confirm"
 const val YOO_MONEY_PAY_URL = "https://yoomoney.ru/to/4100119599343199"
 const val YOO_MONEY_HOME_URL = "https://yoomoney.ru"
+const val YOO_MONEY_OAUTH_REDIRECT_URI = "yugdom://yoomoney/oauth"
+const val YOO_MONEY_RETURN_URI = "yugdom://yoomoney/return"
 
 enum class OperationType(val value: String) {
   CREATE("create"),
